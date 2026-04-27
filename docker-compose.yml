@@ -1,23 +1,6 @@
 version: '3.8'
 
 services:
-  # Redis 缓存（可选，当前版本用内存 Map）
-  redis:
-    image: redis:7-alpine
-    container_name: crowdsource-redis
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    networks:
-      - crowdsource-net
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-
   # Spring Boot 应用
   app:
     build:
@@ -32,22 +15,11 @@ services:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/crowdsource_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
       SPRING_DATASOURCE_USERNAME: cs_user
       SPRING_DATASOURCE_PASSWORD: 'Ganyakun0506,'
-      # Redis 配置（如果需要）
-      # SPRING_REDIS_HOST: redis
-      # SPRING_REDIS_PORT: 6379
       # JWT 密钥（生产环境请修改）
       JWT_SECRET: your-production-secret-key-change-this-in-production
       JWT_EXPIRATION: 604800000
       # JVM 参数
       JAVA_OPTS: -Xmx512m -Xms256m
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - crowdsource-net
-      - default  # 连接到 default 网络以访问现有的 mysql 容器
-    external_links:
-      - mysql:mysql  # 链接到现有的 mysql 容器
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/tags"]
       interval: 30s
@@ -55,13 +27,5 @@ services:
       retries: 3
       start_period: 60s
 
-volumes:
-  redis-data:
-    driver: local
-
-networks:
-  crowdsource-net:
-    driver: bridge
-  default:
-    external: true
-    name: bridge  # 使用 Docker 默认的 bridge 网络
+# 不定义网络，使用 Docker 默认的 bridge 网络
+# 这样可以直接访问同一网络中的 mysql 容器

@@ -78,7 +78,11 @@ function show_status() {
     
     echo ""
     log_info "资源占用:"
-    docker stats --no-stream crowdsource-app crowdsource-mysql crowdsource-redis 2>/dev/null || true
+    docker stats --no-stream crowdsource-app crowdsource-redis 2>/dev/null || true
+    
+    echo ""
+    log_info "MySQL 容器状态（现有容器）:"
+    docker ps --filter name=mysql --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || true
 }
 
 function backup_database() {
@@ -88,7 +92,9 @@ function backup_database() {
     BACKUP_FILE="$BACKUP_DIR/crowdsource_$(date +%Y%m%d_%H%M%S).sql"
     
     log_info "备份数据库到: $BACKUP_FILE"
-    docker-compose exec -T mysql mysqldump -uroot -p\${MYSQL_ROOT_PASSWORD} crowdsource > $BACKUP_FILE
+    
+    # 连接到现有的 mysql 容器进行备份
+    docker exec mysql mysqldump -ucs_user -p'Ganyakun0506,' crowdsource_db > $BACKUP_FILE
     
     if [ $? -eq 0 ]; then
         log_info "数据库备份成功: $BACKUP_FILE"
@@ -126,14 +132,25 @@ function init_check() {
         exit 1
     fi
     
+    # 检查现有 MySQL 容器
+    if ! docker ps | grep -q "mysql"; then
+        log_warn "警告: 未检测到运行中的 mysql 容器"
+        log_warn "请确保 MySQL 容器已启动，容器名为 'mysql'"
+    else
+        log_info "检测到 MySQL 容器运行中"
+    fi
+    
+    # 检查数据库是否已初始化
+    DB_CHECK=$(docker exec mysql mysql -ucs_user -p'Ganyakun0506,' crowdsource_db -e "SHOW TABLES;" 2>/dev/null | grep -c "user" || true)
+    if [ "$DB_CHECK" -eq "0" ]; then
+        log_warn "数据库可能未初始化，请先运行: ./init-database.sh"
+    else
+        log_info "数据库已初始化"
+    fi
+    
     # 检查 JWT 密钥是否修改
     if grep -q "your-production-secret-key-change-this-in-production" $COMPOSE_FILE; then
         log_warn "检测到默认 JWT 密钥，建议修改 docker-compose.yml 中的 JWT_SECRET"
-    fi
-    
-    # 检查 MySQL 密码是否修改
-    if grep -q "crowdsource_root_2024" $COMPOSE_FILE; then
-        log_warn "检测到默认 MySQL 密码，建议修改 docker-compose.yml 中的 MYSQL_ROOT_PASSWORD"
     fi
 }
 

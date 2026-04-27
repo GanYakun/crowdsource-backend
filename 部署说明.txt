@@ -1,0 +1,236 @@
+众包小程序后端 - 阿里云服务器部署说明
+==========================================
+
+一、准备工作
+-----------
+1. 确保服务器已安装 Docker 和 Docker Compose
+   
+   # 安装 Docker
+   curl -fsSL https://get.docker.com | bash -s docker
+   
+   # 安装 Docker Compose
+   sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+   sudo chmod +x /usr/local/bin/docker-compose
+   
+   # 验证安装
+   docker --version
+   docker-compose --version
+
+2. 开放服务器端口（阿里云安全组）
+   - 8080（应用端口）
+   - 3306（MySQL，可选，仅内网访问）
+   - 6379（Redis，可选，仅内网访问）
+
+
+二、上传项目到服务器
+-------------------
+方式1：使用 SCP 上传
+
+   # 在本地 Windows 打包（PowerShell）
+   cd D:\project\buiseness-proj
+   tar -czf crowdsource-backend.tar.gz crowdsource-backend/ --exclude='target' --exclude='.idea'
+   
+   # 上传到服务器
+   scp crowdsource-backend.tar.gz root@your-server-ip:/opt/
+   
+   # SSH 登录服务器
+   ssh root@your-server-ip
+   
+   # 解压
+   cd /opt
+   tar -xzf crowdsource-backend.tar.gz
+   cd crowdsource-backend
+
+方式2：使用 Git（推荐）
+
+   # 在服务器上
+   cd /opt
+   git clone <your-git-repository>
+   cd crowdsource-backend
+
+
+三、修改配置（重要！）
+---------------------
+1. 编辑 docker-compose.yml
+
+   vim docker-compose.yml
+   
+   修改以下配置：
+   - MYSQL_ROOT_PASSWORD: 改为强密码
+   - JWT_SECRET: 改为至少32位的随机字符串
+   - 端口映射（如果8080被占用）
+
+2. 给部署脚本添加执行权限
+
+   chmod +x deploy.sh
+
+
+四、部署启动
+-----------
+1. 一键启动（推荐）
+
+   ./deploy.sh start
+   
+   # 查看日志
+   ./deploy.sh logs
+   
+   # 查看状态
+   ./deploy.sh status
+
+2. 手动启动
+
+   docker-compose up -d
+   docker-compose logs -f app
+
+
+五、验证部署
+-----------
+1. 测试接口
+
+   curl http://localhost:8080/api/tags
+   
+   # 或从外网访问
+   curl http://your-server-ip:8080/api/tags
+
+2. 查看服务状态
+
+   docker-compose ps
+   
+   # 应该看到三个服务都是 Up 状态：
+   # - crowdsource-mysql
+   # - crowdsource-redis
+   # - crowdsource-app
+
+
+六、常用运维命令
+--------------
+# 查看日志
+./deploy.sh logs
+docker-compose logs -f app
+
+# 重启服务
+./deploy.sh restart
+docker-compose restart app
+
+# 停止服务
+./deploy.sh stop
+docker-compose down
+
+# 备份数据库
+./deploy.sh backup
+
+# 更新应用
+./deploy.sh update
+
+# 进入容器
+docker-compose exec app sh
+docker-compose exec mysql mysql -uroot -p
+
+
+七、配置 Nginx 反向代理（推荐）
+-----------------------------
+1. 安装 Nginx
+
+   yum install nginx -y  # CentOS
+   apt install nginx -y  # Ubuntu
+
+2. 配置反向代理
+
+   vim /etc/nginx/conf.d/crowdsource.conf
+   
+   内容：
+   server {
+       listen 80;
+       server_name your-domain.com;
+       
+       location / {
+           proxy_pass http://localhost:8080;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       }
+   }
+
+3. 启动 Nginx
+
+   systemctl start nginx
+   systemctl enable nginx
+
+
+八、配置 HTTPS（推荐）
+--------------------
+1. 安装 Certbot
+
+   yum install certbot python3-certbot-nginx -y
+
+2. 申请证书
+
+   certbot --nginx -d your-domain.com
+
+3. 自动续期
+
+   certbot renew --dry-run
+
+
+九、数据备份
+-----------
+1. 手动备份
+
+   ./deploy.sh backup
+
+2. 定时备份（crontab）
+
+   crontab -e
+   
+   # 每天凌晨2点备份
+   0 2 * * * cd /opt/crowdsource-backend && ./deploy.sh backup
+
+
+十、故障排查
+-----------
+1. 应用无法启动
+   - 查看日志：docker-compose logs app
+   - 检查端口占用：netstat -tlnp | grep 8080
+   - 检查数据库连接：docker-compose exec app ping mysql
+
+2. 数据库连接失败
+   - 检查 MySQL 状态：docker-compose ps mysql
+   - 查看 MySQL 日志：docker-compose logs mysql
+   - 进入容器测试：docker-compose exec mysql mysql -uroot -p
+
+3. 内存不足
+   - 调整 JVM 参数：编辑 docker-compose.yml 中的 JAVA_OPTS
+   - 查看资源占用：docker stats
+
+
+十一、性能优化建议
+-----------------
+1. JVM 参数调优（根据服务器内存）
+   - 1GB 内存：-Xmx512m -Xms256m
+   - 2GB 内存：-Xmx1g -Xms512m
+   - 4GB 内存：-Xmx2g -Xms1g
+
+2. MySQL 优化
+   - 调整 innodb_buffer_pool_size
+   - 增加 max_connections
+
+3. 启用 Redis 缓存
+   - 取消 docker-compose.yml 中 Redis 配置的注释
+   - 修改 application.yml 启用 Redis
+
+
+十二、安全建议
+-------------
+1. 修改所有默认密码
+2. 配置防火墙，只开放必要端口
+3. 定期更新系统和 Docker 镜像
+4. 配置日志监控和告警
+5. 定期备份数据
+
+
+联系支持
+--------
+如有问题，请查看：
+- README.md - 项目说明
+- DEPLOY.md - 详细部署文档
+- 日志文件 - docker-compose logs

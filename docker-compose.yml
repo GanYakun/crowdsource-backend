@@ -26,6 +26,38 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    networks:
+      - crowdsource-network
+    depends_on:
+      - mysql
 
-# 不定义网络，使用 Docker 默认的 bridge 网络
-# 这样可以直接访问同一网络中的 mysql 容器
+  # MySQL 容器（如果需要在 compose 中定义）
+  # 注意：如果你的 MySQL 已经在运行，可以注释掉这部分
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: crowdsource_db
+      MYSQL_USER: cs_user
+      MYSQL_PASSWORD: 'Ganyakun0506,'
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - crowdsource-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  crowdsource-network:
+    driver: bridge
+
+volumes:
+  mysql_data:

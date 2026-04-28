@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Spring Boot 应用
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crowdsource-app
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      # 数据库配置
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/crowdsource_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: cs_user
+      SPRING_DATASOURCE_PASSWORD: 'csusermysqlpassword123'
+      # JWT 密钥（生产环境请修改）
+      JWT_SECRET: your-production-secret-key-change-this-in-production
+      JWT_EXPIRATION: 604800000
+      # JVM 参数
+      JAVA_OPTS: -Xmx512m -Xms256m
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - crowdsource-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  # MySQL 8.0 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password_change_me
+      MYSQL_DATABASE: crowdsource_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./init-mysql-user.sql:/docker-entrypoint-initdb.d/02-init-user.sql
+    networks:
+      - crowdsource-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password_change_me"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+networks:
+  crowdsource-network:
+    driver: bridge
+
+volumes:
+  mysql_data:

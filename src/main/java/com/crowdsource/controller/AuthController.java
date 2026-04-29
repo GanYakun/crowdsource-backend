@@ -29,7 +29,6 @@ public class AuthController {
      */
     @PostMapping("/sms/send")
     public Result<?> sendSms(@RequestParam String phone) {
-        authService.sendSmsCode(phone);
-        return Result.success();
+        return Result.success(authService.sendSmsCode(phone));
     }
 }

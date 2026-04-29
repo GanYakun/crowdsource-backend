@@ -51,12 +51,17 @@ public class AuthService {
     /**
      * 发送短信验证码（模拟）
      */
-    public void sendSmsCode(String phone) {
+    public Map<String, Object> sendSmsCode(String phone) {
         // TODO: 接入短信服务商
         String code = String.valueOf((int) ((Math.random() * 9 + 1) * 100000));
         long expire = Instant.now().toEpochMilli() + SMS_EXPIRE_MS;
         smsCodeStore.put(phone, new long[]{Long.parseLong(code), expire});
+        Map<String, Object> result = new HashMap<>();
+        result.put("code", code);
+        result.put("phone", phone);
+        result.put("expire", expire);
         System.out.println("【模拟短信】手机号 " + phone + " 验证码：" + code);
+        return result;
     }
 
     private void validateSmsCode(String phone, String inputCode) {

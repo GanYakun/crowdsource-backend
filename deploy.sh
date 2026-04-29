@@ -76,9 +76,30 @@ function stop_services() {
 }
 
 function restart_services() {
-    log_info "重启服务..."
-    $COMPOSE_CMD restart
-    log_info "服务已重启"
+    log_info "重启容器（不重新构建镜像）..."
+    log_warn "注意：此命令不会重新构建镜像，代码变更不会生效"
+    log_warn "如果你更新了代码，请使用: ./deploy.sh update"
+    $COMPOSE_CMD restart app
+    log_info "容器已重启"
+}
+
+function update_app() {
+    log_info "更新应用（重新构建镜像 + 重启容器）..."
+
+    log_info "[1/3] 重新构建应用镜像..."
+    $COMPOSE_CMD build app
+
+    log_info "[2/3] 重启应用容器..."
+    $COMPOSE_CMD up -d app
+
+    log_info "[3/3] 等待应用启动..."
+    sleep 15
+
+    log_info "检查服务状态..."
+    $COMPOSE_CMD ps
+
+    log_info "应用更新完成！"
+    log_info "查看日志: ./deploy.sh logs"
 }
 
 function show_logs() {
@@ -107,17 +128,18 @@ function show_help() {
     echo "可用命令:"
     echo "  start      - 启动所有服务（MySQL + 应用）"
     echo "  stop       - 停止所有服务"
-    echo "  restart    - 重启所有服务"
+    echo "  restart    - 重启应用容器（不重新构建，代码变更不生效）"
+    echo "  update     - 重新构建镜像并重启（代码变更后使用此命令）"
     echo "  logs       - 查看应用日志"
     echo "  status     - 查看服务状态"
     echo "  help       - 显示帮助信息"
     echo ""
     echo "当前 Docker Compose 命令: $COMPOSE_CMD"
     echo ""
-    echo "快速开始:"
-    echo "  1. ./deploy.sh start      # 启动服务"
-    echo "  2. curl http://localhost:8080/api/tags  # 测试 API"
-    echo "  3. ./deploy.sh logs       # 查看日志"
+    echo "代码更新流程:"
+    echo "  1. 上传新代码到服务器"
+    echo "  2. ./deploy.sh update     # 重新构建并重启"
+    echo "  3. ./deploy.sh logs       # 查看日志确认"
 }
 
 # 主逻辑
@@ -131,6 +153,9 @@ case "$1" in
         ;;
     restart)
         restart_services
+        ;;
+    update)
+        update_app
         ;;
     logs)
         show_logs
